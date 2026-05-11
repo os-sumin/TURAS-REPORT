@@ -1,0 +1,31 @@
+[project]
+name = "tfee-report"
+version = "0.1.0"
+description = "TURAS 기술료 납부 가능성 예측 — 최종보고서 생성 모듈"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+    "openpyxl>=3.1",
+    "jinja2>=3.1",
+    "weasyprint>=62.0",
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+db = ["oracledb>=2.0"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[project.scripts]
+tfee-report = "tfee_report.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tfee_report*"]
+
+[tool.setuptools.package-data]
+"tfee_report.report" = ["templates/*.html.j2", "templates/*.css"]

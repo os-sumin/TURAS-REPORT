@@ -1,6 +1,23 @@
-# TURAS — 기술료 납부 가능성 예측모델 패치
+# TURAS — 기술료 납부 가능성 예측모델
 
-기존 EnFTRMS(Spring Boot + MyBatis + Oracle) 레포에 통합할 수 있는 형태의 패치 모듈.
+두 가지 산출물이 공존합니다. **`scorecard.yml` 룰셋은 두 산출물이 공유** — 룰 수정은 한 곳만 하면 됩니다.
+
+| 산출물 | 위치 | 용도 |
+|---|---|---|
+| **Python 최종보고서 생성기** | `python-report/` | 엑셀 양식 → 5차원 예측 → **PDF 최종보고서** |
+| Spring Boot 패치 (EnFTRMS 통합용) | `enftrms-patch/` | 운영 시스템 내 예측 API/대시보드 |
+
+## Python (최종보고서 — 메인)
+
+```bash
+cd python-report
+pip install -e .
+tfee-report --excel input.xlsx --out reports/
+```
+
+상세: `python-report/README.md`
+
+## Spring Boot 패치 (EnFTRMS 합본용)
 
 ```
 enftrms-patch/
