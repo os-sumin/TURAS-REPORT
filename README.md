@@ -1,51 +1,40 @@
 # TURAS — 기술료 납부 가능성 예측모델
 
-두 가지 산출물이 공존합니다. **`scorecard.yml` 룰셋은 두 산출물이 공유** — 룰 수정은 한 곳만 하면 됩니다.
+두 가지 산출물이 공존합니다. **`scorecard.yml` 룰셋**의 내용은 두 산출물이 공유 — 룰 수정은 양쪽 다 반영하면 됩니다.
 
-| 산출물 | 위치 | 용도 |
-|---|---|---|
-| **Python 최종보고서 생성기** | `python-report/` | 엑셀 양식 → 5차원 예측 → **PDF 최종보고서** |
-| Spring Boot 패치 (EnFTRMS 통합용) | `enftrms-patch/` | 운영 시스템 내 예측 API/대시보드 |
+| 산출물 | 위치 | 통합 대상 | 출력 |
+|---|---|---|---|
+| **enftrms-analysis 패치** (메인) | `enftrms-analysis-patch/` | 기존 FastAPI 내부 AI 서비스 | **DOCX 최종보고서의 TECH_FEE 섹션** |
+| EnFTRMS 백엔드 패치 | `enftrms-patch/` | Spring Boot + MyBatis + Oracle 본 레포 | 예측 API + 우선순위 XLSX |
 
-## Python (최종보고서 — 메인)
+## 1. enftrms-analysis 패치 (Python — 메인)
 
-```bash
-cd python-report
-pip install -e .
-tfee-report --excel input.xlsx --out reports/
-```
+`/internal/ai/reports/generate` 의 `TECH_FEE` 섹션이 단순 stringify 대신 **실제 5차원 예측**을 수행하도록 추가.
 
-상세: `python-report/README.md`
+- 신규: `app/services/reports/tech_fee_prediction/` — 엔진, 5개 차원, scorecard.yml, input_adapter, section_writer
+- 교체: `app/services/reports/heuristic_sections.py` — TECH_FEE 분기에서 예측 엔진 호출
+- 신규: `tests/test_tech_fee_prediction.py` — 13개 테스트
+- 신규: `examples/report-tech-fee.json` — 예시 payload
 
-## Spring Boot 패치 (EnFTRMS 합본용)
+검증: 패치 적용 후 **upstream 전체 27/27 pytest 통과**, 예시 payload로 38KB DOCX 정상 생성.
 
-```
-enftrms-patch/
-├── docs/                         # 통합 개요, DB 스키마, API 명세, 스코어카드 산식
-├── db/oracle/                    # DDL V001 ~ V002
-├── pom.xml                       # 단독 빌드용 (합본 시 제거)
-└── src/
-    ├── main/java/com/enftrms/prediction/
-    │   ├── controller/           # /api/tech-fee-prediction/*
-    │   ├── service/              # ScoreCardEngine + 차원 계산기 + 보고서
-    │   ├── collector/            # 외부 신호 수집기 (G2B/KIPRIS/DART 스켈레톤)
-    │   ├── domain/, dto/, mapper/
-    ├── main/resources/
-    │   ├── rules/scorecard.yml   # 5차원 × 20점 = 100점 산식 (외부화)
-    │   └── mapper/prediction/    # MyBatis XML
-    └── test/                     # D3 + ScoreCardEngine 단위 테스트
-```
+상세: `enftrms-analysis-patch/README.md`
 
-상세는 `enftrms-patch/docs/00_overview.md` 참조.
+## 2. EnFTRMS 백엔드 패치 (Java/Spring Boot — 운영 시스템 통합용)
 
-## 현재 패치 범위
+기존 EnFTRMS 본 레포에 `com.enftrms.prediction` 패키지 추가:
+- Oracle DDL (TFEE_PRED_* 테이블 + 정답값 view)
+- 5차원 스코어카드 엔진 + 차원 계산기
+- 엑셀 업로드 → 정답값 DB 적재
+- 예측 API + 우선순위 XLSX 다운로드
 
-- ✅ 5차원 스코어카드 엔진 (D1~D5) — 룰 YAML 외부화
-- ✅ D3 (R&D 자본효율·기술료 이력) 엔드투엔드 — 엑셀 양식 → 정답값 → 점수
-- ✅ 엑셀 업로드 API (`PS_ORGN_TFEE_CCLT` 양식 그대로)
-- ✅ 예측 실행/조회 API + HTML 리포트 + 우선순위 XLSX 다운로드
-- ✅ 등급/추천조치 (사업기획서 STEP 7 기준)
-- ⏳ D1/D2 (재무·KSIC 유사도) — 수식만 외부화, 실제 입력 연결 필요
-- ⏳ D4 외부 수집기 — 인터페이스만, 실 API 호출 미구현
-- ⏳ D5 (언론분석) — 기존 모듈 재사용 전제
-- ⏳ ML 보정 모델 — 정답 1,000건 누적 후
+상세: `enftrms-patch/docs/00_overview.md`
+
+## 룰 단일 출처
+
+두 산출물 모두 동일한 `scorecard.yml` 구조 사용:
+
+- Python: `enftrms-analysis-patch/app/services/reports/tech_fee_prediction/scorecard.yml`
+- Java:   `enftrms-patch/src/main/resources/rules/scorecard.yml`
+
+룰을 바꾸려면 두 파일을 함께 갱신.

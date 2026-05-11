@@ -1,31 +1,20 @@
-"""scorecard.yml 로딩.
-
-기본은 Java 패치와 같은 파일을 공유:
-    enftrms-patch/src/main/resources/rules/scorecard.yml
-"""
+"""scorecard.yml 로딩."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
-DEFAULT_YAML_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "enftrms-patch"
-    / "src"
-    / "main"
-    / "resources"
-    / "rules"
-    / "scorecard.yml"
-)
+DEFAULT_YAML_PATH = Path(__file__).parent / "scorecard.yml"
 
 
 @dataclass
 class Threshold:
-    gte: Optional[float] = None
-    lte: Optional[float] = None
+    gte: float | None = None
+    lte: float | None = None
     score: float = 0.0
 
 
@@ -41,9 +30,9 @@ class Rule:
     max: float
     type: str = "threshold"
     input: str = ""
-    score_when_true: Optional[float] = None
-    slope: Optional[float] = None
-    cap: Optional[float] = None
+    score_when_true: float | None = None
+    slope: float | None = None
+    cap: float | None = None
     thresholds: list[Threshold] = field(default_factory=list)
     buckets: list[Bucket] = field(default_factory=list)
 
@@ -71,12 +60,6 @@ class RuleSet:
     effective_from: str
     dimensions: dict[str, Dimension]
     grades: list[GradeRule]
-    raw_yaml: str = ""
-
-
-def _camel(snake: str) -> str:
-    parts = snake.split("_")
-    return parts[0] + "".join(p.title() for p in parts[1:])
 
 
 def _rule_from_dict(d: dict[str, Any]) -> Rule:
@@ -103,14 +86,17 @@ def _dim_from_dict(d: dict[str, Any]) -> Dimension:
     )
 
 
-def load(path: Optional[Path] = None) -> RuleSet:
+def load(path: Path | str | None = None) -> RuleSet:
     p = Path(path) if path else DEFAULT_YAML_PATH
-    raw = p.read_text(encoding="utf-8")
-    data = yaml.safe_load(raw)
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
     return RuleSet(
         rule_version=data["ruleVersion"],
         effective_from=data.get("effectiveFrom", ""),
         dimensions={k: _dim_from_dict(v) for k, v in data["dimensions"].items()},
         grades=[GradeRule(**g) for g in data["grades"]],
-        raw_yaml=raw,
     )
+
+
+@lru_cache(maxsize=4)
+def load_cached(path: str | None = None) -> RuleSet:
+    return load(Path(path) if path else None)

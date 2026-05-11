@@ -27,7 +27,10 @@ def evaluate(rule: Rule, value: Any) -> float:
 
 
 def _binary(rule: Rule, v: Any) -> float:
-    truthy = bool(v) if not isinstance(v, str) else v.strip().lower() in {"y", "yes", "true", "1"}
+    if isinstance(v, str):
+        truthy = v.strip().lower() in {"y", "yes", "true", "1"}
+    else:
+        truthy = bool(v)
     if not truthy:
         return 0.0
     return rule.score_when_true if rule.score_when_true is not None else rule.max

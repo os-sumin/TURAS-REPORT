@@ -1,33 +1,34 @@
-"""예측 결과 데이터 모델.
+"""예측 입력/결과 데이터 모델 (dataclass).
 
-Java DTO(`PredictionResultDto`, `DimensionScoreDto`)와 1:1 대응.
+본 모듈은 외부에 노출되는 pydantic 스키마(`app.schemas.reports`)와는 분리.
+요청은 GenerateReportRequest 로 들어와 input_adapter 가 본 모델로 변환.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
 class TfeeHistory:
-    """D3 핵심 입력 — 엑셀 양식에서 직접 산출."""
+    """D3 핵심 입력 — 엑셀 양식 PS_ORGN_TFEE_CCLT 에서 산출."""
     has_past_tfee: bool = False
-    cumulative_recovery_rate: Optional[float] = None
-    recovery_rate_percentile: Optional[float] = None  # 0.0 ~ 1.0
-    project_recovery_rate: Optional[float] = None
-    months_to_first_tfee: Optional[int] = None
+    cumulative_recovery_rate: float | None = None
+    recovery_rate_percentile: float | None = None    # 0.0 ~ 1.0
+    project_recovery_rate: float | None = None
+    months_to_first_tfee: int | None = None
     consecutive_years: int = 0
 
 
 @dataclass
 class OrgnFinancials:
-    sales_growth_rate: Optional[float] = None
-    operating_margin: Optional[float] = None
-    debt_ratio: Optional[float] = None
-    cash_to_gov_fund: Optional[float] = None
-    rnd_intensity: Optional[float] = None
-    asset_growth_rate: Optional[float] = None
+    sales_growth_rate: float | None = None
+    operating_margin: float | None = None
+    debt_ratio: float | None = None
+    cash_to_gov_fund: float | None = None
+    rnd_intensity: float | None = None
+    asset_growth_rate: float | None = None
 
 
 @dataclass
@@ -35,23 +36,20 @@ class SubjectInfo:
     sbjt_id: str = ""
     sbjt_name: str = ""
     ksic: str = ""
-    end_de: Optional[datetime] = None
+    end_de: datetime | None = None
     total_gov_fund: int = 0
 
 
 @dataclass
 class PredictionContext:
-    """차원 계산기들이 입력으로 받는 컨테이너."""
     sbjt_id: str
     orgn_id: str
     pred_at: datetime
-    subject: Optional[SubjectInfo] = None
-    financials: Optional[OrgnFinancials] = None
-    tfee_history: Optional[TfeeHistory] = None
+    subject: SubjectInfo | None = None
+    financials: OrgnFinancials | None = None
+    tfee_history: TfeeHistory | None = None
     external_metrics: dict[str, float] = field(default_factory=dict)
     news_event_counts: dict[str, int] = field(default_factory=dict)
-
-    # 외부 보고서 표시에 쓰는 부가 정보
     company_name: str = ""
     project_name: str = ""
 
@@ -93,7 +91,7 @@ class PredictionResult:
     grade: Grade
     rule_version: str
     dimensions: list[DimensionScore]
-    context: Optional[PredictionContext] = None
+    context: PredictionContext | None = None
     factors_positive: list[str] = field(default_factory=list)
     factors_negative: list[str] = field(default_factory=list)
     factors_check: list[str] = field(default_factory=list)

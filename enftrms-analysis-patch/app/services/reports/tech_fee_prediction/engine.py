@@ -1,24 +1,25 @@
-"""스코어카드 엔진 — 5차원 계산기 결과를 합산해 총점/등급 산출."""
+"""스코어카드 엔진 — 5차원 합산 → 등급."""
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from ..models import DimensionScore, Grade, PredictionContext, PredictionResult
-from . import dimensions, rules
+from .dimensions import ALL
+from .models import DimensionScore, Grade, PredictionContext, PredictionResult
+from .rules import GradeRule, RuleSet, load_cached
 
 KST = timezone(timedelta(hours=9))
 
 
-def _pick_grade(score: float, grades: list[rules.GradeRule]) -> rules.GradeRule:
+def _pick_grade(score: float, grades: list[GradeRule]) -> GradeRule:
     eligible = [g for g in grades if score >= g.min]
     return max(eligible, key=lambda g: g.min) if eligible else grades[-1]
 
 
-def run(ctx: PredictionContext, rule_set: rules.RuleSet | None = None) -> PredictionResult:
-    rs = rule_set or rules.load()
+def run(ctx: PredictionContext, rule_set: RuleSet | None = None) -> PredictionResult:
+    rs = rule_set or load_cached()
 
     dims: list[DimensionScore] = []
-    for code, key, calc in dimensions.ALL:
+    for code, key, calc in ALL:  # noqa: B007 — code 변수는 의도적 미사용
         dim = rs.dimensions.get(key)
         if not dim:
             continue

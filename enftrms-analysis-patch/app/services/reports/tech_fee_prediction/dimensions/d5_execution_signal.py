@@ -1,7 +1,10 @@
-"""D5. 기업 실행 신호 — news_event_counts(이벤트→건수) 합산."""
+"""D5. 기업 실행 신호 — news_event_counts(이벤트→건수) 합산.
+
+언론분석 서비스(app/services/news/) 결과를 그대로 이벤트 타입별 카운트로 매핑하여 입력.
+"""
 from __future__ import annotations
 
-from ...models import DimensionScore, PredictionContext, RuleDetail
+from ..models import DimensionScore, PredictionContext, RuleDetail
 from ..rules import Dimension
 
 
@@ -16,7 +19,6 @@ def calculate(ctx: PredictionContext, dim: Dimension) -> DimensionScore:
         total += contrib
         detail.append(RuleDetail(rule_name=event_type, score=round(contrib, 2),
                                  max=dim.weight, input_value=count))
-    clipped = max(0.0, min(dim.weight, total))
     return DimensionScore(code="D5", label=dim.label,
-                          score=round(clipped, 2),
+                          score=round(max(0.0, min(dim.weight, total)), 2),
                           max_score=dim.weight, detail=detail)

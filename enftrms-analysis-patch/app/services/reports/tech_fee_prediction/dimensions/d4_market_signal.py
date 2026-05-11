@@ -1,8 +1,8 @@
-"""D4. 시장·산업 신호 — 외부 수집기가 채운 external_metrics 사용."""
+"""D4. 시장·산업 신호 — external_metrics 사용."""
 from __future__ import annotations
 
-from ...models import DimensionScore, PredictionContext, RuleDetail
 from ..evaluator import evaluate
+from ..models import DimensionScore, PredictionContext, RuleDetail
 from ..rules import Dimension
 
 

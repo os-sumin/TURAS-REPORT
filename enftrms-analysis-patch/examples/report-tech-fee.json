@@ -1,0 +1,61 @@
+{
+  "traceId": "AIR-TFEE-001",
+  "reportId": "AIR-TFEE-001",
+  "outputFormat": "DOCX",
+  "reportContext": {
+    "reportYear": 2026,
+    "includeGptAnalysis": false,
+    "sections": ["SUMMARY", "TECH_FEE", "RECOMMENDATIONS"]
+  },
+  "contract": {
+    "contractId": 1,
+    "contractNumber": "2026-NXB-001",
+    "contractName": "넥스트바이오 기술실시 계약",
+    "licenseType": "DIRECT"
+  },
+  "organization": {
+    "organizationId": 501,
+    "organizationName": "넥스트바이오",
+    "companySize": "SMALL"
+  },
+  "project": {
+    "projectId": 9001,
+    "projectCode": "S2022-00141998",
+    "projectName": "생물반응기를 활용한 인삼씨앗 개갑장치",
+    "agencyName": "중소기업기술정보진흥원"
+  },
+  "analysis": {
+    "techFee": {
+      "tfeeHistory": {
+        "hasPastTfee": true,
+        "projectRecoveryRate": 0.18,
+        "recoveryRatePercentile": 0.72,
+        "monthsToFirstTfee": 14,
+        "consecutiveYears": 2
+      },
+      "financials": {
+        "salesGrowthRate": 0.18,
+        "operatingMargin": 0.06,
+        "debtRatio": 1.2,
+        "cashToGovFund": 0.8,
+        "rndIntensity": 0.07,
+        "assetGrowthRate": 0.12
+      },
+      "externalMetrics": {
+        "industrySalesGrowth": 0.08,
+        "g2bBidCount": 7,
+        "g2bContractAmount": 250000000,
+        "patentFilingGrowth": 0.15
+      },
+      "newsEventCounts": {
+        "PRODUCT_LAUNCH": 1,
+        "CERTIFICATION": 2,
+        "SUPPLY_CONTRACT": 1
+      }
+    }
+  },
+  "financialInputs": [
+    {"year": 2024, "revenue": 1200000000, "operatingIncome": 60000000},
+    {"year": 2025, "revenue": 1416000000, "operatingIncome": 85000000}
+  ]
+}

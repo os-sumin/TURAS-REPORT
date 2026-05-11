@@ -1,8 +1,8 @@
 """D2. 기업 재무·사업화 체력."""
 from __future__ import annotations
 
-from ...models import DimensionScore, OrgnFinancials, PredictionContext, RuleDetail
 from ..evaluator import evaluate
+from ..models import DimensionScore, OrgnFinancials, PredictionContext, RuleDetail
 from ..rules import Dimension
 
 
