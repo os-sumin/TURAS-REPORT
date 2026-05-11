@@ -3,27 +3,24 @@
 Spring 측이 보내는 `analysis.techFee` payload 를 본 모듈이 해석.
 허용 형태:
 
-  1) 단일 객체 — 한 과제 한 기관:
+  1) 명시적 — 한 과제 한 기관:
      analysis.techFee = {
        "tfeeHistory": { "hasPastTfee": true, "projectRecoveryRate": 0.15, ... },
        "financials":  { "salesGrowthRate": 0.12, ... },        # 선택
        "externalMetrics": { "g2bBidCount": 5, ... },           # 선택
        "newsEventCounts": { "PRODUCT_LAUNCH": 1, ... },        # 선택
+       "articles": [ { "title": "...", "summary": "..." }, ... ],  # 선택 — 자동 이벤트 분류
        "predAt": "2026-05-11"                                  # 선택
      }
 
-  2) 엑셀 양식 한 행을 그대로 펼친 형태 — Spring 측에서 DB 한 줄을 그대로 보낼 때:
+  2) 엑셀 양식 한 행을 그대로 펼친 형태:
      analysis.techFee = {
-       "row": {
-         "ttlPayGvstmAm": 100000000, "ttlUseGvstmAm": 99000000,
-         "salesOccurYn": "Y", "rndIncomeAm": 10000000,
-         "tfeeAm": 200000, "techCtrbPt": 0.5,
-         "techIpmtCntrDe": "2023-06-01",   # 실시계약일 (선택)
-         "baseYear": 2026
-       }
+       "row": { "ttlPayGvstmAm": ..., "ttlUseGvstmAm": ..., "salesOccurYn": "Y",
+                "tfeeAm": ..., "techCtrbPt": 0.5, "baseYear": 2026 }
      }
 
-위 둘 중 하나가 주어지지 않으면 financial_inputs / contract / project 메타데이터로 최대한 fallback.
+`newsEventCounts` 가 직접 제공되면 그대로 사용. 없고 `articles` 가 있으면
+news_event_classifier 로 키워드 분류 후 카운트.
 """
 from __future__ import annotations
 
@@ -33,6 +30,7 @@ from typing import Any
 from app.schemas.reports import GenerateReportRequest
 
 from .models import OrgnFinancials, PredictionContext, SubjectInfo, TfeeHistory
+from .news_event_classifier import classify_articles
 
 
 def build_context(request: GenerateReportRequest) -> PredictionContext | None:
@@ -55,10 +53,20 @@ def build_context(request: GenerateReportRequest) -> PredictionContext | None:
         financials=financials,
         tfee_history=tfee_history,
         external_metrics=_as_float_map(block.get("externalMetrics")),
-        news_event_counts=_as_int_map(block.get("newsEventCounts")),
+        news_event_counts=_resolve_news_events(block),
         company_name=request.organization.organization_name or "",
         project_name=request.project.project_name or "",
     )
+
+
+def _resolve_news_events(block: dict[str, Any]) -> dict[str, int]:
+    explicit = _as_int_map(block.get("newsEventCounts"))
+    if explicit:
+        return explicit
+    articles = block.get("articles")
+    if isinstance(articles, list) and articles:
+        return classify_articles(articles)
+    return {}
 
 
 # ---------- private ----------

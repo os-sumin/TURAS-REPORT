@@ -47,11 +47,11 @@
         "g2bContractAmount": 250000000,
         "patentFilingGrowth": 0.15
       },
-      "newsEventCounts": {
-        "PRODUCT_LAUNCH": 1,
-        "CERTIFICATION": 2,
-        "SUPPLY_CONTRACT": 1
-      }
+      "articles": [
+        {"title": "넥스트바이오, 식약처 혁신의료기기 지정", "publishedAt": "2025-01-20"},
+        {"title": "서울대병원과 공급계약 체결로 상용화 가속", "publishedAt": "2025-02-15"},
+        {"title": "AI 진단 플랫폼 상용화 출시", "publishedAt": "2025-03-01"}
+      ]
     }
   },
   "financialInputs": [

@@ -23,11 +23,18 @@ _EXTERNAL_PHRASES = [
 
 def predict_and_write_section(request: GenerateReportRequest) -> str | None:
     """예측 실행 + 섹션 본문 생성. 입력 부족 시 None."""
+    result = predict_result_for_request(request)
+    if result is None:
+        return None
+    return write_section(result)
+
+
+def predict_result_for_request(request: GenerateReportRequest) -> PredictionResult | None:
+    """순수 예측 결과 객체만 반환 (DOCX 테이블 렌더 등에서 사용)."""
     ctx = build_context(request)
     if ctx is None:
         return None
-    result = run_engine(ctx)
-    return write_section(result)
+    return run_engine(ctx)
 
 
 def write_section(result: PredictionResult) -> str:

@@ -191,3 +191,102 @@ def test_predict_and_write_section_direct():
     assert body is not None
     assert "총점" in body
     assert "/100점" in body
+
+
+# ----- news event classifier -----
+
+def test_classifier_detects_product_launch_and_certification():
+    from app.services.reports.tech_fee_prediction.news_event_classifier import classify_articles
+    counts = classify_articles([
+        {"title": "넥스트바이오, AI 진단 플랫폼 상용화 출시"},
+        {"title": "식약처 혁신의료기기 지정 — 인증 획득"},
+        {"title": "서울대병원과 공급계약 체결"},
+    ])
+    assert counts.get("PRODUCT_LAUNCH", 0) >= 1
+    assert counts.get("CERTIFICATION", 0) >= 1
+    assert counts.get("SUPPLY_CONTRACT", 0) >= 1
+
+
+def test_classifier_negative_priority():
+    from app.services.reports.tech_fee_prediction.news_event_classifier import classify_articles
+    # 같은 기사에 출시 + 소송 키워드가 같이 있으면 부정 우선
+    counts = classify_articles([
+        {"title": "신제품 출시 소식과 함께 진행되는 특허 소송 분쟁"},
+    ])
+    assert counts.get("LAWSUIT", 0) == 1
+    assert counts.get("PRODUCT_LAUNCH", 0) == 0
+
+
+def test_classifier_unmatched_article_does_not_count():
+    from app.services.reports.tech_fee_prediction.news_event_classifier import classify_articles
+    counts = classify_articles([
+        {"title": "올해 분기별 매출 변동에 대한 일반 분석"},
+    ])
+    assert counts == {}
+
+
+def test_adapter_classifies_articles_when_no_explicit_counts():
+    req = _request({"techFee": {
+        "tfeeHistory": {"hasPastTfee": True, "projectRecoveryRate": 0.1},
+        "articles": [
+            {"title": "공급계약 체결로 매출 확대"},
+            {"title": "식약처 허가 획득"},
+            {"title": "투자유치 시리즈B 완료"},
+        ],
+    }})
+    ctx = build_context(req)
+    assert ctx is not None
+    assert ctx.news_event_counts.get("SUPPLY_CONTRACT", 0) >= 1
+    assert ctx.news_event_counts.get("CERTIFICATION", 0) >= 1
+    assert ctx.news_event_counts.get("INVESTMENT", 0) >= 1
+
+
+def test_adapter_explicit_counts_override_articles():
+    req = _request({"techFee": {
+        "newsEventCounts": {"PRODUCT_LAUNCH": 3},
+        "articles": [{"title": "공급계약 체결"}],  # 무시되어야 함
+    }})
+    ctx = build_context(req)
+    assert ctx.news_event_counts == {"PRODUCT_LAUNCH": 3}
+
+
+# ----- DOCX renderer table -----
+
+def test_docx_renderer_embeds_tech_fee_table():
+    from app.services.reports.service import ReportService
+    import base64
+    from io import BytesIO
+    from docx import Document
+
+    req = _request({"techFee": {
+        "tfeeHistory": {"hasPastTfee": True, "projectRecoveryRate": 0.18,
+                        "recoveryRatePercentile": 0.72, "monthsToFirstTfee": 14,
+                        "consecutiveYears": 2},
+        "financials": {"salesGrowthRate": 0.18, "operatingMargin": 0.06},
+        "externalMetrics": {"g2bBidCount": 5},
+        "articles": [
+            {"title": "공급계약 체결"},
+            {"title": "인증 획득"},
+        ],
+    }})
+    # TECH_FEE 섹션이 sections 에 포함되어 있어야 표가 그려짐
+    req.report_context.sections = ["SUMMARY", "TECH_FEE", "RECOMMENDATIONS"]
+
+    resp = ReportService().generate(req)
+    assert resp.status == "COMPLETED"
+
+    doc = Document(BytesIO(base64.b64decode(resp.content_base64)))
+    table_texts = [
+        cell.text for table in doc.tables for row in table.rows for cell in row.cells
+    ]
+    # 5대 차원 코드가 표에 모두 나타나야 함
+    assert any("D1" == t for t in table_texts)
+    assert any("D2" == t for t in table_texts)
+    assert any("D3" == t for t in table_texts)
+    assert any("D4" == t for t in table_texts)
+    assert any("D5" == t for t in table_texts)
+
+    # 등급/추천조치 단락 존재
+    all_text = "\n".join(p.text for p in doc.paragraphs)
+    assert "총점" in all_text
+    assert "추천 조치" in all_text

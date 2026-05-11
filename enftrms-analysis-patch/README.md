@@ -9,6 +9,7 @@
 # enftrms-analysis 레포 루트에서
 cp -R enftrms-analysis-patch/app/services/reports/tech_fee_prediction  app/services/reports/
 cp    enftrms-analysis-patch/app/services/reports/heuristic_sections.py app/services/reports/
+cp    enftrms-analysis-patch/app/renderers/docx_renderer.py             app/renderers/
 cp    enftrms-analysis-patch/tests/test_tech_fee_prediction.py          tests/
 cp    enftrms-analysis-patch/examples/report-tech-fee.json              examples/
 
@@ -22,10 +23,12 @@ pip install pyyaml
 
 | 파일 | 종류 | 설명 |
 |---|---|---|
-| `app/services/reports/tech_fee_prediction/` | **신규** | 5차원 스코어카드 엔진 |
+| `app/services/reports/tech_fee_prediction/` | **신규** | 5차원 스코어카드 엔진 + 뉴스 이벤트 분류기 |
 | `app/services/reports/tech_fee_prediction/scorecard.yml` | **신규** | 룰 외부화 (Java 패치와 내용 동일) |
+| `app/services/reports/tech_fee_prediction/news_event_classifier.py` | **신규** | 기사 → 이벤트 타입 분류 (휴리스틱 + 선택적 LLM) |
 | `app/services/reports/heuristic_sections.py` | **교체** | `TECH_FEE` 분기에서 예측 엔진 호출 |
-| `tests/test_tech_fee_prediction.py` | **신규** | 11개 테스트 |
+| `app/renderers/docx_renderer.py` | **교체** | TECH_FEE 섹션에 5대 차원 점수 표 렌더링 |
+| `tests/test_tech_fee_prediction.py` | **신규** | 19개 테스트 |
 | `examples/report-tech-fee.json` | **신규** | 예시 payload |
 
 ## 흐름
@@ -51,7 +54,7 @@ POST /internal/ai/reports/generate
               TECH_FEE 섹션을 DOCX 단락으로 변환
 ```
 
-## 입력 payload 두 가지 형태
+## 입력 payload 형태
 
 ### 1) 명시적 형태 (권장)
 
@@ -89,7 +92,37 @@ POST /internal/ai/reports/generate
 }
 ```
 
-둘 다 없으면 기존 동작과 동일 ("Spring payload에 기술료 분석 데이터가 포함되지 않았습니다.")
+### 3) 기사 목록 자동 분류 — D5 자동 채움
+
+`newsEventCounts` 가 없고 `articles` 가 있으면 키워드 휴리스틱 분류기가 자동으로 카운트:
+
+```json
+"analysis": {
+  "techFee": {
+    "tfeeHistory": { ... },
+    "articles": [
+      {"title": "식약처 혁신의료기기 지정", "publishedAt": "2025-01-20"},
+      {"title": "공급계약 체결로 상용화 가속", "publishedAt": "2025-02-15"}
+    ]
+  }
+}
+```
+
+지원 이벤트 코드 (scorecard.yml `eventScores` 와 동일):
+`PRODUCT_LAUNCH`, `SUPPLY_CONTRACT`, `MASS_PRODUCTION`, `CERTIFICATION`, `INVESTMENT`,
+`FACILITY_EXPAND`, `PATENT_FILED`, `LAWSUIT`, `INSOLVENCY`, `WITHDRAWAL`.
+
+세 형태 모두 없으면 기존 동작과 동일 ("Spring payload에 기술료 분석 데이터가 포함되지 않았습니다.")
+
+## DOCX 결과물
+
+TECH_FEE 섹션에 다음이 포함됨:
+
+1. 종합 평가 문단 (총점·등급·추천조치)
+2. 차원별 점수 줄글
+3. **차원별 점수 Word 표** (코드 / 차원 / 점수 / 만점) — 5행
+4. 총점·등급 강조 단락
+5. 룰 버전 메타
 
 ## 5차원 (사업기획서 V장)
 

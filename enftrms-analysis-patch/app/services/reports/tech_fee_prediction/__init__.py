@@ -18,13 +18,21 @@ from .models import (
     SubjectInfo,
     TfeeHistory,
 )
-from .section_writer import predict_and_write_section, write_section
+from .news_event_classifier import EVENT_CODES, classify_articles
+from .section_writer import (
+    predict_and_write_section,
+    predict_result_for_request,
+    write_section,
+)
 
 __all__ = [
     "run",
     "build_context",
     "predict_and_write_section",
+    "predict_result_for_request",
     "write_section",
+    "classify_articles",
+    "EVENT_CODES",
     "PredictionContext",
     "PredictionResult",
     "DimensionScore",

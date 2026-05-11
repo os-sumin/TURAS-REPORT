@@ -23,12 +23,50 @@
 ## 2. EnFTRMS 백엔드 패치 (Java/Spring Boot — 운영 시스템 통합용)
 
 기존 EnFTRMS 본 레포에 `com.enftrms.prediction` 패키지 추가:
+
 - Oracle DDL (TFEE_PRED_* 테이블 + 정답값 view)
-- 5차원 스코어카드 엔진 + 차원 계산기
+- 5차원 스코어카드 엔진 + 차원 계산기 (Java 측 자체 예측 — 운영 화면용)
 - 엑셀 업로드 → 정답값 DB 적재
 - 예측 API + 우선순위 XLSX 다운로드
+- **`integration/`** — Python 최종보고서 서비스 호출 어댑터
+  - `TechFeePayloadBuilder` : PS_ORGN_TFEE_CCLT 한 행 → `analysis.techFee` JSON
+  - `EnftrmsAnalysisClient` : `/internal/ai/reports/generate` WebClient
+  - `TechFeeReportOrchestrator` : 원샷 호출 — DB 행 + 기사 목록 → DOCX bytes
 
 상세: `enftrms-patch/docs/00_overview.md`
+
+## 전체 흐름
+
+```
+PS_ORGN_TFEE_CCLT (Oracle)
+        │
+        ▼
+Spring Boot 컨트롤러 (운영 시스템)
+        │
+        ▼
+TechFeeReportOrchestrator.generate(row, articles)
+        │  TechFeePayloadBuilder.fromRow(row, articles)
+        │      → analysis.techFee = { row, articles }
+        ▼
+EnftrmsAnalysisClient.generateReport(req)
+        │  POST /internal/ai/reports/generate (X-Internal-Token)
+        ▼
+─────────── Python AI 서비스 (enftrms-analysis) ───────────
+heuristic_sections.TECH_FEE 분기
+        │  input_adapter.build_context(req)
+        │  ├─ row 해석 → TfeeHistory
+        │  └─ articles → news_event_classifier → newsEventCounts (D5)
+        │  engine.run(ctx)  → 5차원 점수
+        │  section_writer  → 한국어 본문
+        ▼
+docx_renderer  → TECH_FEE 섹션 + 차원별 점수 Word 표
+        ▼
+DOCX (base64) 반환
+─────────────────────────────────────────────────────────
+        │
+        ▼
+Spring Boot → 사용자 다운로드
+```
 
 ## 룰 단일 출처
 
