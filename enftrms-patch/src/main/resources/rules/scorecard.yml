@@ -1,0 +1,177 @@
+# ====================================================================
+# 기술료 납부 가능성 예측 — 룰 기반 스코어카드
+# 5차원 × 20점 = 100점
+# 본 파일을 수정하면 ruleVersion 을 올려야 함 (snapshot 보관용)
+# ====================================================================
+ruleVersion: "v1.0.0"
+effectiveFrom: "2026-05-11"
+
+dimensions:
+
+  D1_project_fit:
+    label: "과제 사업화 적합성"
+    weight: 20
+    rules:
+      - name: ksic_match
+        max: 8
+        type: threshold
+        input: "ksicSimilarity"
+        thresholds: [ { gte: 0.8, score: 8 }, { gte: 0.5, score: 4 }, { gte: 0.0, score: 0 } ]
+      - name: tech_productization
+        max: 7
+        type: linear
+        input: "productizationKeywordCount"
+        slope: 1.5
+        cap: 7
+      - name: end_recency
+        max: 5
+        type: bucket
+        input: "monthsSinceEnd"
+        buckets:
+          - { range: [12, 24],  score: 5 }
+          - { range: [6, 12],   score: 3 }
+          - { range: [24, 36],  score: 2 }
+
+  D2_financial_capacity:
+    label: "기업 재무·사업화 체력"
+    weight: 20
+    rules:
+      - name: sales_growth_rate
+        max: 6
+        type: threshold
+        input: "salesGrowthRate"
+        thresholds: [ { gte: 0.20, score: 6 }, { gte: 0.10, score: 4 }, { gte: 0.0, score: 2 } ]
+      - name: operating_margin
+        max: 4
+        type: threshold
+        input: "operatingMargin"
+        thresholds: [ { gte: 0.05, score: 4 }, { gte: 0.0, score: 2 } ]
+      - name: debt_ratio
+        max: 3
+        type: threshold
+        input: "debtRatio"
+        thresholds: [ { lte: 1.5, score: 3 }, { lte: 3.0, score: 1 } ]
+      - name: cash_to_govfund
+        max: 3
+        type: threshold
+        input: "cashToGovFund"
+        thresholds: [ { gte: 1.0, score: 3 }, { gte: 0.5, score: 2 } ]
+      - name: rnd_intensity
+        max: 2
+        type: threshold
+        input: "rndIntensity"
+        thresholds: [ { gte: 0.05, score: 2 }, { gte: 0.02, score: 1 } ]
+      - name: asset_growth
+        max: 2
+        type: threshold
+        input: "assetGrowthRate"
+        thresholds: [ { gte: 0.10, score: 2 }, { gte: 0.0, score: 1 } ]
+
+  D3_capital_efficiency:
+    label: "R&D 자본효율·기술료 이력"
+    weight: 20
+    rules:
+      - name: past_tfee_paid
+        max: 6
+        type: binary
+        input: "hasPastTfee"
+        scoreWhenTrue: 6
+      - name: recovery_rate_percentile
+        max: 5
+        type: percentile
+        input: "recoveryRatePercentile"
+        # 0.0 ~ 1.0 percentile → 0 ~ 5점 선형
+      - name: project_recovery_rate
+        max: 4
+        type: threshold
+        input: "projectRecoveryRate"
+        thresholds: [ { gte: 0.20, score: 4 }, { gte: 0.10, score: 3 }, { gte: 0.05, score: 2 }, { gte: 0.0, score: 1 } ]
+      - name: tfee_speed_months
+        max: 3
+        type: bucket
+        input: "monthsToFirstTfee"
+        buckets:
+          - { range: [0, 12],   score: 3 }
+          - { range: [12, 24],  score: 2 }
+          - { range: [24, 36],  score: 1 }
+      - name: repeated_occurrence
+        max: 2
+        type: threshold
+        input: "consecutiveYears"
+        thresholds: [ { gte: 2, score: 2 }, { gte: 1, score: 1 } ]
+
+  D4_market_signal:
+    label: "시장·산업 신호"
+    weight: 20
+    rules:
+      - name: industry_sales_growth
+        max: 3
+        type: threshold
+        input: "industrySalesGrowth"
+        thresholds: [ { gte: 0.05, score: 3 }, { gte: 0.0, score: 1 } ]
+      - name: industry_actor_growth
+        max: 2
+        type: threshold
+        input: "industryActorGrowth"
+        thresholds: [ { gte: 0.03, score: 2 }, { gte: 0.0, score: 1 } ]
+      - name: similar_rnd_growth
+        max: 2
+        type: threshold
+        input: "similarRndGrowth"
+        thresholds: [ { gte: 0.10, score: 2 }, { gte: 0.0, score: 1 } ]
+      - name: similar_commercialization
+        max: 2
+        type: linear
+        input: "similarCommercializationCount"
+        slope: 0.4
+        cap: 2
+      - name: g2b_bid_count
+        max: 4
+        type: linear
+        input: "g2bBidCount"
+        slope: 0.2
+        cap: 4
+      - name: g2b_contract_amount
+        max: 2
+        type: log_scaled
+        input: "g2bContractAmount"
+        cap: 2
+      - name: trade_growth
+        max: 2
+        type: threshold
+        input: "tradeGrowth"
+        thresholds: [ { gte: 0.10, score: 2 }, { gte: 0.0, score: 1 } ]
+      - name: patent_filing_growth
+        max: 2
+        type: threshold
+        input: "patentFilingGrowth"
+        thresholds: [ { gte: 0.10, score: 2 }, { gte: 0.0, score: 1 } ]
+      - name: policy_events
+        max: 1
+        type: linear
+        input: "policyEventCount"
+        slope: 0.5
+        cap: 1
+
+  D5_execution_signal:
+    label: "기업 실행 신호"
+    weight: 20
+    source: "company_news_analysis"   # 기존 언론분석 모듈 재사용
+    eventScores:
+      PRODUCT_LAUNCH:    5
+      SUPPLY_CONTRACT:   5
+      MASS_PRODUCTION:   5
+      CERTIFICATION:     3
+      INVESTMENT:        3
+      FACILITY_EXPAND:   2
+      PATENT_FILED:      1
+      LAWSUIT:          -3
+      INSOLVENCY:      -10
+      WITHDRAWAL:      -10
+
+grades:
+  - { min: 80, code: VERY_HIGH, label: "매우 높음", action: "우선 확인 및 증빙 요청" }
+  - { min: 65, code: HIGH,      label: "높음",     action: "기술실시 여부 확인" }
+  - { min: 50, code: MID,       label: "보통",     action: "모니터링" }
+  - { min: 35, code: LOW,       label: "낮음",     action: "미실시 사유 확인" }
+  - { min: 0,  code: VERY_LOW,  label: "매우 낮음", action: "후순위 관리" }

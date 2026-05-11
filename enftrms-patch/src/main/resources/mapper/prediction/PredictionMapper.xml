@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.enftrms.prediction.mapper.PredictionMapper">
+
+    <!-- ============== 입력 데이터 ============== -->
+
+    <resultMap id="SubjectInfoMap" type="com.enftrms.prediction.domain.SubjectInfo">
+        <constructor>
+            <idArg column="SBJT_ID"        javaType="String" />
+            <arg    column="SBJT_NAME"      javaType="String" />
+            <arg    column="KSIC"           javaType="String" />
+            <arg    column="END_DE"         javaType="java.time.LocalDate" />
+            <arg    column="TOTAL_GOV_FUND" javaType="long" />
+            <arg    column="TOTAL_PRJ_COST" javaType="long" />
+        </constructor>
+    </resultMap>
+
+    <select id="selectSubjectInfo" resultMap="SubjectInfoMap">
+        SELECT  S.SBJT_ID
+              , S.SBJT_NM           AS SBJT_NAME
+              , S.KSIC_CD           AS KSIC
+              , S.SBJT_END_DE       AS END_DE
+              , NVL(S.TTL_GVSTM_AM, 0)   AS TOTAL_GOV_FUND
+              , NVL(S.TTL_PRJC_CST_AM,0) AS TOTAL_PRJ_COST
+        FROM    PS_SBJT S
+        WHERE   S.SBJT_ID = #{sbjtId}
+    </select>
+
+    <resultMap id="OrgnFinancialsMap" type="com.enftrms.prediction.domain.OrgnFinancials">
+        <constructor>
+            <arg column="SALES_GROWTH_RATE"  javaType="java.lang.Double" />
+            <arg column="OPERATING_MARGIN"   javaType="java.lang.Double" />
+            <arg column="DEBT_RATIO"         javaType="java.lang.Double" />
+            <arg column="CASH_TO_GOV_FUND"   javaType="java.lang.Double" />
+            <arg column="RND_INTENSITY"      javaType="java.lang.Double" />
+            <arg column="ASSET_GROWTH_RATE"  javaType="java.lang.Double" />
+        </constructor>
+    </resultMap>
+
+    <select id="selectOrgnFinancials" resultMap="OrgnFinancialsMap">
+        <!-- 실제 EnFTRMS 재무 테이블 연결 시 본 쿼리 보강. 일단 NULL 안전 반환 -->
+        SELECT  NULL AS SALES_GROWTH_RATE
+              , NULL AS OPERATING_MARGIN
+              , NULL AS DEBT_RATIO
+              , NULL AS CASH_TO_GOV_FUND
+              , NULL AS RND_INTENSITY
+              , NULL AS ASSET_GROWTH_RATE
+        FROM DUAL
+    </select>
+
+    <!-- D3 핵심: 엑셀 양식 적재된 TFEE_PRED_ANSWER 기반 집계 -->
+    <resultMap id="TfeeHistoryMap" type="com.enftrms.prediction.domain.TfeeHistory">
+        <constructor>
+            <arg column="HAS_PAST_TFEE"           javaType="boolean" />
+            <arg column="CUMULATIVE_RECOVERY"     javaType="java.lang.Double" />
+            <arg column="RECOVERY_PERCENTILE"     javaType="java.lang.Double" />
+            <arg column="PROJECT_RECOVERY_RATE"   javaType="java.lang.Double" />
+            <arg column="MONTHS_TO_FIRST_TFEE"    javaType="java.lang.Integer" />
+            <arg column="CONSECUTIVE_YEARS"       javaType="int" />
+        </constructor>
+    </resultMap>
+
+    <select id="selectTfeeHistory" resultMap="TfeeHistoryMap">
+        WITH
+        OWN_HIST AS (
+            SELECT * FROM TFEE_PRED_ANSWER
+             WHERE FRUT_OWN_ORGN_ID = #{orgnId}
+        ),
+        TARGET AS (
+            SELECT * FROM OWN_HIST WHERE SBJT_ID = #{sbjtId}
+        ),
+        AGG AS (
+            SELECT
+                CASE WHEN SUM(CASE WHEN ANSWER_Y = 1 THEN 1 ELSE 0 END) > 0
+                     THEN 1 ELSE 0 END                            AS HAS_PAST_TFEE_INT,
+                NULLIF(SUM(NVL(TTL_PAY_GVSTM_AM,0)), 0)            AS DENOM_CUM,
+                SUM(NVL(TFEE_AM,0))                                AS NUM_CUM,
+                COUNT(DISTINCT CASE WHEN ANSWER_Y = 1 THEN BASE_YEAR END) AS CONSEC_YR
+            FROM OWN_HIST
+        ),
+        TARGET_AGG AS (
+            SELECT
+                NULLIF(SUM(NVL(TTL_USE_GVSTM_AM,0)), 0) AS DENOM_PRJ,
+                SUM(NVL(TFEE_AM,0))                     AS NUM_PRJ,
+                MIN(BASE_YEAR)                          AS FIRST_YR
+            FROM TARGET WHERE ANSWER_Y = 1
+        ),
+        SBJT_END AS (
+            SELECT EXTRACT(YEAR FROM SBJT_END_DE) AS END_YR
+              FROM PS_SBJT WHERE SBJT_ID = #{sbjtId}
+        ),
+        PEER AS (
+            SELECT NVL(P.PCT, 0) AS PCT FROM (
+                SELECT PERCENT_RANK() OVER (ORDER BY CUM_RATE) AS PCT, ORGN
+                  FROM (
+                    SELECT FRUT_OWN_ORGN_ID AS ORGN,
+                           SUM(NVL(TFEE_AM,0))/NULLIF(SUM(NVL(TTL_PAY_GVSTM_AM,0)),0) AS CUM_RATE
+                      FROM TFEE_PRED_ANSWER
+                     GROUP BY FRUT_OWN_ORGN_ID
+                  )
+            ) P
+            WHERE P.ORGN = #{orgnId}
+        )
+        SELECT
+            CASE WHEN AGG.HAS_PAST_TFEE_INT = 1 THEN 1 ELSE 0 END   AS HAS_PAST_TFEE,
+            AGG.NUM_CUM / AGG.DENOM_CUM                              AS CUMULATIVE_RECOVERY,
+            (SELECT PCT FROM PEER)                                   AS RECOVERY_PERCENTILE,
+            TARGET_AGG.NUM_PRJ / TARGET_AGG.DENOM_PRJ                AS PROJECT_RECOVERY_RATE,
+            CASE
+              WHEN TARGET_AGG.FIRST_YR IS NULL OR SBJT_END.END_YR IS NULL THEN NULL
+              ELSE (TARGET_AGG.FIRST_YR - SBJT_END.END_YR) * 12
+            END                                                      AS MONTHS_TO_FIRST_TFEE,
+            NVL(AGG.CONSEC_YR, 0)                                    AS CONSECUTIVE_YEARS
+        FROM AGG, TARGET_AGG, SBJT_END
+    </select>
+
+    <select id="selectPeerRecoveryRates" resultType="java.lang.Double">
+        SELECT SUM(NVL(A.TFEE_AM,0)) / NULLIF(SUM(NVL(A.TTL_PAY_GVSTM_AM,0)),0)
+          FROM TFEE_PRED_ANSWER A
+          JOIN PS_SBJT S ON S.SBJT_ID = A.SBJT_ID
+         WHERE S.KSIC_CD = #{ksic}
+         GROUP BY A.FRUT_OWN_ORGN_ID
+    </select>
+
+    <!-- ============== 결과 저장 ============== -->
+
+    <select id="nextPredId" resultType="long">
+        SELECT SEQ_TFEE_PRED_ID.NEXTVAL FROM DUAL
+    </select>
+
+    <insert id="insertResult">
+        INSERT INTO TFEE_PRED_RESULT (
+            PRED_ID, SBJT_ID, ORGN_ID, PRED_AT, TOTAL_SCORE, GRADE_CD, RULE_VERSION, RECOMM_ACTION
+        ) VALUES (
+            #{predId}, #{sbjtId}, #{orgnId}, SYSTIMESTAMP,
+            #{totalScore}, #{gradeCd}, #{ruleVersion}, #{recommAction}
+        )
+    </insert>
+
+    <insert id="insertDimensionScores">
+        INSERT INTO TFEE_PRED_DIM_SCORE (PRED_ID, DIM_CD, DIM_SCORE, MAX_SCORE, RULE_DETAIL)
+        <foreach collection="dims" item="d" separator=" UNION ALL ">
+            SELECT #{predId}, #{d.code}, #{d.score}, #{d.maxScore}, #{d.detailJson,jdbcType=CLOB} FROM DUAL
+        </foreach>
+    </insert>
+
+    <insert id="insertFactors">
+        INSERT INTO TFEE_PRED_FACTOR (PRED_ID, FACTOR_SEQ, FACTOR_TP, FACTOR_TEXT, SOURCE_CD)
+        <foreach collection="factors" item="f" separator=" UNION ALL ">
+            SELECT #{predId}, #{f.seq}, #{f.tp}, #{f.text}, #{f.source} FROM DUAL
+        </foreach>
+    </insert>
+
+    <!-- ============== 조회 ============== -->
+
+    <resultMap id="ResultMap" type="com.enftrms.prediction.dto.PredictionResultDto">
+        <id     property="predId"        column="PRED_ID" />
+        <result property="sbjtId"        column="SBJT_ID" />
+        <result property="orgnId"        column="ORGN_ID" />
+        <result property="predAt"        column="PRED_AT" />
+        <result property="totalScore"    column="TOTAL_SCORE" />
+        <result property="probabilityPt" column="PROBABILITY_PT" />
+        <result property="ruleVersion"   column="RULE_VERSION" />
+    </resultMap>
+
+    <select id="selectLatestResult" resultMap="ResultMap">
+        SELECT * FROM (
+            SELECT R.* FROM TFEE_PRED_RESULT R
+             WHERE R.SBJT_ID = #{sbjtId} AND R.ORGN_ID = #{orgnId}
+             ORDER BY R.PRED_AT DESC
+        ) WHERE ROWNUM = 1
+    </select>
+
+    <select id="selectDimensionScores" resultType="com.enftrms.prediction.dto.DimensionScoreDto">
+        SELECT DIM_CD AS code, DIM_SCORE AS score, MAX_SCORE AS maxScore
+          FROM TFEE_PRED_DIM_SCORE
+         WHERE PRED_ID = #{predId}
+         ORDER BY DIM_CD
+    </select>
+
+    <select id="selectFactors" resultType="map">
+        SELECT FACTOR_SEQ AS seq, FACTOR_TP AS tp, FACTOR_TEXT AS text, SOURCE_CD AS source
+          FROM TFEE_PRED_FACTOR
+         WHERE PRED_ID = #{predId}
+         ORDER BY FACTOR_SEQ
+    </select>
+
+    <select id="selectPriorityList" resultMap="ResultMap">
+        SELECT * FROM (
+            SELECT R.*, ROW_NUMBER() OVER (ORDER BY R.TOTAL_SCORE DESC, R.PRED_AT DESC) RN
+              FROM TFEE_PRED_RESULT R
+             WHERE R.GRADE_CD IN
+                 <foreach collection="grades" item="g" open="(" separator="," close=")">#{g}</foreach>
+        )
+        WHERE RN BETWEEN #{offset}+1 AND #{offset}+#{limit}
+    </select>
+
+    <select id="countPriorityList" resultType="long">
+        SELECT COUNT(*) FROM TFEE_PRED_RESULT
+         WHERE GRADE_CD IN
+             <foreach collection="grades" item="g" open="(" separator="," close=")">#{g}</foreach>
+    </select>
+
+    <!-- ============== 엑셀 업로드 ============== -->
+
+    <insert id="insertAnswerBatch">
+        INSERT INTO TFEE_PRED_ANSWER (
+            SBJT_ID, FRUT_OWN_ORGN_ID, TECH_IPMT_ORGN_ID, BASE_YEAR,
+            TTL_PAY_GVSTM_AM, TTL_USE_GVSTM_AM, SALES_OCCUR_YN, RND_INCOME_AM,
+            TECH_CTRB_PT, TFEE_AM, ANSWER_Y, EXCEL_BATCH_ID
+        )
+        <foreach collection="rows" item="r" separator=" UNION ALL ">
+            SELECT
+                #{r.sbjtId}, #{r.frutOwnOrgnId}, #{r.techIpmtOrgnId}, #{r.baseYear},
+                NVL(#{r.ttlPayGvstmAm},0), NVL(#{r.ttlUseGvstmAm},0),
+                #{r.salesOccurYn}, NVL(#{r.rndIncomeAm},0),
+                NVL(#{r.techCtrbPt},0), NVL(#{r.tfeeAm},0),
+                #{r.answerY,jdbcType=NUMERIC}, #{r.excelBatchId}
+            FROM DUAL
+        </foreach>
+    </insert>
+
+    <!-- ============== 룰 버전 ============== -->
+
+    <insert id="insertRuleVersionIfAbsent">
+        MERGE INTO TFEE_PRED_RULE_VER T
+        USING (SELECT #{version} AS V FROM DUAL) S
+           ON (T.RULE_VERSION = S.V)
+         WHEN NOT MATCHED THEN
+            INSERT (RULE_VERSION, RULE_YAML, EFFECTIVE_FROM)
+            VALUES (#{version}, #{yaml}, TRUNC(SYSDATE))
+    </insert>
+
+</mapper>
